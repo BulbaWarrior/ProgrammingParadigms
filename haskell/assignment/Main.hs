@@ -170,7 +170,89 @@ zipSpaces (Space (Line l1 x1 r1)) (Space (Line l2 x2 r2)) =
 -- | Zip together two spaces with a given combining function.
 -- zipLinesWith (*) integers integers
 -- = Line [1,4,9,..] 0 [1,4,9,..]
--- zipSpacesWith :: (a -> b -> c) -> Space a -> Space b -> Space c
--- zipSpacesWith
+zipSpacesWith :: (a -> b -> c) -> Space a -> Space b -> Space c
+zipSpacesWith f (Space (Line l1 x1 r1)) (Space (Line l2 x2 r2)) =
+  Space (Line (zipElems (zip l1 l2)) (zipLinesWith f x1 x2) (zipElems (zip r1 r2)))
+  where
+    --zipElems :: [(Line a1, Line b1)] -> [Line c1]
+    zipElems = map (\(a, b) -> zipLinesWith f a b)
+
+
+countCells :: Line Cell -> Int
+countCells (Line left x right) =
+  reduce left + count x + reduce right
+  where
+    reduce = foldl
+      (\state current ->
+        case current of
+          Alive -> state + 1
+          Dead -> state)
+      0
+    count Alive = 1
+    count Dead = 0
+
+
+countNeighbours :: Space Cell -> Int
+countNeighbours (Space (Line (bottom:_) (Line (l:_) x (r:_))  (top:_))) =
+  (rowNeighbours bottom) + (toInt l) + (toInt r) + (rowNeighbours top)
+  where
+    rowNeighbours :: Line Cell -> Int
+    rowNeighbours x = countCells (cutLine 1 x)
+    toInt :: Cell -> Int
+    toInt Alive = 1
+    toInt Dead = 0
+
+countNeighbours (Space (Line [] x top)) = countNeighbours (Space (Line [(Line [Dead] Dead [Dead])] x top))
+countNeighbours (Space (Line bottom x [])) = countNeighbours(Space (Line bottom x [(Line [Dead] Dead [Dead])]))
+
+focusCell :: Space Cell -> Cell
+focusCell (Space (Line _ (Line _ x _) _)) = x
+
+conwayRule :: Space Cell -> Cell
+conwayRule space
+  | countNeighbours space < 2 = Dead
+  | countNeighbours space >= 4 = Dead
+  | countNeighbours space == 3 = Alive
+  | countNeighbours space == 2 = focusCell space
+
+shiftSpaceLeft :: Space a -> Space a
+
+spaceShifts :: Space a -> Space (Space a)
+spaceShifts (Space (Line bottom center top)) =
+  Space (lineShifts (Line (map genSpace bottom) (Space (lineShifts center)) (map genSpace top)))
+  where
+    genSpace :: Line a -> Space a
+    genSpace line = Space (lineShifts line)
+
+
+applyConwayRule :: Space Cell -> Space Cell
+applyConwayRule space = mapSpace conwayRule (spaceShifts space)
+
+renderSpace :: Space Picture -> Picture
+renderSpace (Space line) =
+  renderLine_
+  (mapLine (\(dy, line) -> translated 0 (fromInteger dy) (renderLine line)) (zipLines integers line))
+
+dead = Line [Dead, Dead] Dead [Dead, Dead]
+top = Line [Dead, Dead] Dead [Alive, Dead]
+middle = Line [Dead, Dead] Alive [Dead, Dead]
+bottom = Line [Alive, Dead] Dead [Dead, Dead]
+space = Space (Line [bottom, dead] middle [top, dead])
+
+
+animateConway :: Space Cell -> IO ()
+animateConway world = activityOf world updateWorld renderCellSpace
+  where
+    updateWorld event =
+      case event of
+        PointerPress _ ->
+          applyConwayRule
+        _ -> id
+    renderCellSpace space =
+      renderSpace (mapSpace renderCell space)
+
+
 main :: IO ()
-main = drawingOf (renderRule30 40 (cutLine 40 initialState))
+main = drawingOf (renderSpace (mapSpace extract (spaceShifts space)))
+  where
+    extract (Space (Line _ (Line _ cell _) _)) = renderCell cell

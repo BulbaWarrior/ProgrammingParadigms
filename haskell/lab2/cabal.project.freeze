@@ -1,0 +1,6 @@
+active-repositories: hackage.haskell.org:merge
+constraints: any.base ==4.14.3.0,
+             any.ghc-prim ==0.6.1,
+             any.integer-gmp ==1.0.3.0,
+             any.rts ==1.0.1
+index-state: hackage.haskell.org 2021-11-03T18:28:12Z
